@@ -105,7 +105,7 @@
                 </button>
                 <div class="flex flex-col">
                     <h1 class="font-semibold text-lg flex items-center gap-2">
-                        Gemini Clone <span class="text-xs bg-brand-500/10 text-brand-600 px-2 py-0.5 rounded-full border border-brand-500/20">Alpha</span>
+                        Universal AI <span class="text-xs bg-brand-500/10 text-brand-600 px-2 py-0.5 rounded-full border border-brand-500/20">Alpha</span>
                     </h1>
                     <span id="current-model-display" class="text-xs text-gray-500 truncate max-w-[200px]">deepseek/deepseek-r1:free</span>
                 </div>
@@ -271,11 +271,24 @@
             renderChatList();
             if (switchTo) loadChat(newChat.id);
             if (window.innerWidth < 768) toggleSidebar(false); // Close mobile sidebar
+            return newChat;
         }
 
         function loadChat(chatId) {
+            let chat = state.chats.find(c => c.id === chatId);
+            
+            // Failsafe: If chat doesn't exist, default to first available or create new
+            if (!chat) {
+                if (state.chats.length > 0) {
+                    chat = state.chats[0];
+                    chatId = chat.id;
+                } else {
+                    chat = createNewChat(true);
+                    return; // createNewChat calls loadChat
+                }
+            }
+
             state.currentChatId = chatId;
-            const chat = state.chats.find(c => c.id === chatId);
             
             // Update UI
             const container = document.getElementById('messages-container');
@@ -316,6 +329,14 @@
                 return;
             }
 
+            // --- FAILSAFE FIX: Ensure chat exists ---
+            let currentChat = state.chats.find(c => c.id === state.currentChatId);
+            if (!currentChat) {
+                console.warn("Chat ID not found, creating new chat...");
+                currentChat = createNewChat(true);
+            }
+            // ----------------------------------------
+
             // UI Updates
             inputEl.value = '';
             inputEl.style.height = 'auto'; // Reset height
@@ -333,11 +354,12 @@
             appendLoadingMessageToDOM(aiMsgId);
 
             try {
-                const currentChat = state.chats.find(c => c.id === state.currentChatId);
+                // Re-fetch chat object to ensure latest state
+                currentChat = state.chats.find(c => c.id === state.currentChatId); 
                 const messagesPayload = [];
                 
                 // Add System Prompt if exists
-                if (currentChat.systemPrompt) {
+                if (currentChat && currentChat.systemPrompt) {
                     messagesPayload.push({ role: "system", content: currentChat.systemPrompt });
                 }
                 
@@ -389,10 +411,6 @@
                                 const delta = json.choices[0].delta?.content || "";
                                 aiContent += delta;
                                 
-                                // Render markdown incrementally (simple method) or update raw text
-                                // For performance, we render markdown every X chars or at end, 
-                                // but for smoothness, we just update text for now then markdown at end?
-                                // Let's try continuous markdown rendering for "rich" feel
                                 contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiContent)) + '<span class="cursor-blink"></span>';
                                 
                                 scrollToBottom();
@@ -414,7 +432,10 @@
 
             } catch (error) {
                 if (error.name !== 'AbortError') {
-                    document.getElementById(aiMsgId).querySelector('.message-content').innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                    const errMsgEl = document.getElementById(aiMsgId);
+                    if(errMsgEl) {
+                        errMsgEl.querySelector('.message-content').innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                    }
                 }
             } finally {
                 state.isGenerating = false;
