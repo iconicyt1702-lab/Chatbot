@@ -55,6 +55,21 @@
         }
         @keyframes blink { 50% { opacity: 0; } }
 
+        /* Fade In Animation - ADDED */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-fade-in-up {
+            animation: fadeInUp 0.3s ease-out;
+        }
+
         /* Mobile Viewport Fix */
         body { height: 100dvh; overflow: hidden; }
     </style>
@@ -216,8 +231,8 @@
                 // Markdown Setup
                 marked.setOptions({
                     highlight: (code, lang) => {
-                        const language = highlight.getLanguage(lang) ? lang : 'plaintext';
-                        return highlight.highlight(code, { language }).value;
+                        const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                        return hljs.highlight(code, { language }).value;
                     }
                 });
 
@@ -272,15 +287,23 @@
             
             // Render Messages
             const container = document.getElementById('messages-container');
-            container.innerHTML = ''; 
+            const welcomeView = document.getElementById('welcome-view');
+            
+            // Clear previous messages (keep welcome view)
+            Array.from(container.children).forEach(child => {
+                if (child.id !== 'welcome-view') {
+                    child.remove();
+                }
+            });
             
             document.getElementById('system-prompt-input').value = chat.systemPrompt || '';
 
             if (chat.messages.length === 0) {
-                document.getElementById('welcome-view').style.display = 'flex';
-                setTimeout(() => document.getElementById('welcome-view').style.opacity = '1', 10);
+                welcomeView.style.display = 'flex';
+                setTimeout(() => welcomeView.style.opacity = '1', 10);
             } else {
-                document.getElementById('welcome-view').style.display = 'none';
+                welcomeView.style.display = 'none';
+                welcomeView.style.opacity = '0';
                 chat.messages.forEach(msg => appendMessageToDOM(msg.role, msg.content, false));
                 scrollToBottom();
             }
@@ -318,7 +341,11 @@
             // UI Setup
             inputEl.value = '';
             inputEl.style.height = 'auto';
-            document.getElementById('welcome-view').style.display = 'none';
+            
+            // FIXED: Hide welcome view properly
+            const welcomeView = document.getElementById('welcome-view');
+            welcomeView.style.opacity = '0';
+            setTimeout(() => welcomeView.style.display = 'none', 300);
             
             // Update State & UI
             addMessageToState('user', content);
@@ -373,6 +400,7 @@
                 const aiMsgEl = document.getElementById(aiMsgId);
                 const contentDiv = aiMsgEl.querySelector('.message-content');
                 
+                // Clear loading animation
                 contentDiv.innerHTML = '<span class="cursor-blink"></span>';
 
                 while (true) {
@@ -390,22 +418,30 @@
                                 aiContent += delta;
                                 contentDiv.innerHTML = DOMPurify.sanitize(marked.parse(aiContent)) + '<span class="cursor-blink"></span>';
                                 scrollToBottom();
-                            } catch (e) { /* ignore parse errors in stream */ }
+                            } catch (e) { 
+                                // ignore parse errors in stream
+                                console.log('Parse error:', e);
+                            }
                         }
                     }
                 }
 
+                // Remove cursor
                 contentDiv.querySelector('.cursor-blink')?.remove();
                 addMessageToState('assistant', aiContent);
                 
+                // Auto-generate title from first message
                 if (currentChat.messages.length === 2) {
                     generateTitle(content);
                 }
 
             } catch (error) {
+                console.error('Send error:', error);
                 if (error.name !== 'AbortError') {
                     const el = document.getElementById(aiMsgId);
-                    if (el) el.querySelector('.message-content').innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                    if (el) {
+                        el.querySelector('.message-content').innerHTML = `<span class="text-red-500">Error: ${error.message}</span>`;
+                    }
                 }
             } finally {
                 state.isGenerating = false;
@@ -439,6 +475,7 @@
 
             div.appendChild(bubble);
             container.appendChild(div);
+            scrollToBottom();
         }
 
         function appendLoadingMessageToDOM(id) {
